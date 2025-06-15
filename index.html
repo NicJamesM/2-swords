@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>2 Swords</title>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="height=device-height, initial-scale=1.0">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1f2937;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: arial;
+        }
+        
+        #status {
+            display: inline-block;
+            vertical-align: top;
+            margin-top: 20px;
+            margin-left: 30px;
+            font-weight: bold;
+            color: rgb(120, 120, 120);
+        }
+
+        #progress {
+            height: 20px;
+            width: 300px;
+        }
+
+        canvas.emscripten {
+            border: 0px none;
+            background-color: transparent;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            padding: 0;
+            margin: 0 auto;
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+        }
+        
+        div.emscripten { text-align: center; }
+    </style>
+</head>
+<body>
+    <div id="transfer" align=center>
+        <div class="emscripten" id="status">Downloading...</div>
+        <div class="emscripten">
+            <progress value="0" max="100" id="progress"></progress>
+        </div>
+    </div>
+
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=1></canvas>
+    
+    <script type="application/javascript">
+        // Initialize Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyB3UhSfILnWALbYDburdXZq-S0kkRNBSsE",
+            authDomain: "swords-87d64.firebaseapp.com",
+            projectId: "swords-87d64",
+            storageBucket: "swords-87d64.firebasestorage.app",
+            messagingSenderId: "830774453818",
+            appId: "1:830774453818:web:da0b6ed844f08a93db3703"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        
+        // Make Firebase accessible to Python
+        window.db = db;
+        window.firebase = firebase;
+        
+        // Helper functions for Python
+        window.submitScore = async (name, score) => {
+            try {
+                console.log('Submitting score:', name, '-', score);
+                const docRef = await db.collection('leaderboard').add({
+                    name: name,
+                    score: parseInt(score),
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                console.log('Score submitted! ID:', docRef.id);
+                return true;
+            } catch (e) {
+                console.error('Error submitting score:', e);
+                return false;
+            }
+        };
+        
+        window.getTopScores = async () => {
+            try {
+                console.log('Fetching top scores...');
+                const snapshot = await db.collection('leaderboard')
+                    .orderBy('score', 'desc')
+                    .limit(10)
+                    .get();
+                const scores = [];
+                snapshot.forEach(doc => {
+                    scores.push({
+                        name: doc.data().name,
+                        score: doc.data().score
+                    });
+                });
+                console.log('Fetched', scores.length, 'scores');
+                return JSON.stringify(scores);
+            } catch (e) {
+                console.error('Error getting scores:', e);
+                return '[]';
+            }
+        };
+        
+        window.firebaseReady = true;
+        console.log('Firebase ready!');
+        
+        // Pygbag module configuration - pointing to CDN
+        var Module = {
+            preRun: [],
+            postRun: [],
+            print: console.log,
+            printErr: console.error,
+            canvas: document.getElementById('canvas'),
+            setStatus: function(text) {
+                if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+                if (text === Module.setStatus.last.text) return;
+                var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+                var now = Date.now();
+                if (m && now - Module.setStatus.last.time < 30) return;
+                Module.setStatus.last.time = now;
+                Module.setStatus.last.text = text;
+                if (m) {
+                    text = m[1];
+                    document.getElementById('progress').value = parseInt(m[2])*100;
+                    document.getElementById('progress').max = parseInt(m[4])*100;
+                    document.getElementById('progress').hidden = false;
+                } else {
+                    document.getElementById('progress').value = null;
+                    document.getElementById('progress').max = null;
+                    document.getElementById('progress').hidden = true;
+                }
+                document.getElementById('status').innerHTML = text;
+            },
+            totalDependencies: 0,
+            monitorRunDependencies: function(left) {
+                this.totalDependencies = Math.max(this.totalDependencies, left);
+                Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+            },
+            wasmBinaryFile: 'https://pygame-web.github.io/archives/0.9/python.wasm'
+        };
+        
+        Module.setStatus('Downloading...');
+        
+        window.onerror = function() {
+            Module.setStatus('Exception thrown, see JavaScript console');
+            Module.setStatus = function(text) {
+                if (text) Module.printErr('[post-exception status] ' + text);
+            };
+        };
+    </script>
+    
+    <!-- Load Python from Pygbag CDN -->
+    <script async type="text/javascript" src="https://pygame-web.github.io/archives/0.9/python.js"></script>
+</body>
+</html>
